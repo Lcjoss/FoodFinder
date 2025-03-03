@@ -69,40 +69,83 @@ public class FrontEnd extends JFrame {
         updateProgressLabels();
     }
 
-    // Helper: Build a container that groups options into rows of 4 with extra spacing.
-    private JPanel createOptionsPanel(String[] options) {
-        JPanel container = new JPanel();
-        container.setLayout(new BoxLayout(container, BoxLayout.Y_AXIS));
-        container.setBackground(pureWhite);
-        int columns = 4;
-        int gap = 15; // extra gap between grid cells and rows
-        for (int i = 0; i < options.length; i += columns) {
-            JPanel row = new JPanel(new GridLayout(1, columns, gap, gap));
-            row.setBackground(pureWhite);
-            for (int j = 0; j < columns; j++) {
-                int index = i + j;
-                if (index < options.length) {
-                    row.add(createOptionCell(options[index]));
-                } else {
-                    // Filler panel with pure white background and no border
-                    JPanel filler = new JPanel();
-                    filler.setBackground(pureWhite);
-                    filler.setBorder(null);
-                    row.add(filler);
+    /**
+     * NEW: A lazy-loading options panel.
+     * It loads a fixed number of rows (each row has 4 items) initially,
+     * and supports loading additional rows.
+     */
+    private class LazyOptionsPanel extends JPanel {
+        private String[] options;
+        private int itemsLoaded = 0;
+        private final int columns = 4;
+        private final int gap = 15; // gap between cells/rows
+
+        public LazyOptionsPanel(String[] options) {
+            this.options = options;
+            setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+            setBackground(pureWhite);
+            // Load initial batch: 4 rows (i.e. up to 16 items)
+            loadMoreRows(4);
+        }
+
+        /**
+         * Loads the next numberOfRows rows (each row = 4 items).
+         * If there are fewer items remaining, only those are added.
+         */
+        public void loadMoreRows(int numberOfRows) {
+            for (int i = 0; i < numberOfRows; i++) {
+                if (itemsLoaded >= options.length) {
+                    break;
+                }
+                JPanel row = new JPanel(new GridLayout(1, columns, gap, gap));
+                row.setBackground(pureWhite);
+                for (int j = 0; j < columns; j++) {
+                    if (itemsLoaded < options.length) {
+                        row.add(createOptionCell(options[itemsLoaded]));
+                        itemsLoaded++;
+                    } else {
+                        // Add filler panel if no more items
+                        JPanel filler = new JPanel();
+                        filler.setBackground(pureWhite);
+                        filler.setBorder(null);
+                        row.add(filler);
+                    }
+                }
+                row.setPreferredSize(new Dimension(800, 130));
+                add(row);
+                // Add vertical spacing between rows except after the last loaded row
+                if (itemsLoaded < options.length) {
+                    add(Box.createVerticalStrut(gap));
                 }
             }
-            // Fix row height (e.g., 130 pixels)
-            row.setPreferredSize(new Dimension(800, 130));
-            container.add(row);
-            // Add vertical spacing between rows (except after the last row)
-            if (i + columns < options.length) {
-                container.add(Box.createVerticalStrut(gap));
-            }
+            revalidate();
+            repaint();
         }
-        return container;
     }
 
-    // Helper: Create a simple toggle button with centered text and a thick border.
+    /**
+     * NEW: A helper method that wraps a LazyOptionsPanel in a JScrollPane.
+     * It attaches a scroll listener to load additional rows when the scrollbar reaches the bottom.
+     */
+    private JScrollPane createOptionsScrollPane(String[] options) {
+        LazyOptionsPanel optionsPanel = new LazyOptionsPanel(options);
+        JScrollPane scrollPane = new JScrollPane(optionsPanel);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        scrollPane.getViewport().setBackground(pureWhite);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(32);
+        scrollPane.setPreferredSize(new Dimension(800, 260));
+
+        // Attach scroll listener to load an extra row when reaching the bottom
+        scrollPane.getVerticalScrollBar().addAdjustmentListener(new AdjustmentListener() {
+            public void adjustmentValueChanged(AdjustmentEvent e) {
+                JScrollBar sb = (JScrollBar) e.getSource();
+                if (!e.getValueIsAdjusting() && sb.getValue() + sb.getVisibleAmount() >= sb.getMaximum()) {
+                    optionsPanel.loadMoreRows(1);
+                }
+            }
+        });
+        return scrollPane;
+    }
     private SimpleToggleButton createOptionCell(String text) {
         SimpleToggleButton toggle = new SimpleToggleButton(text);
         int borderThickness = 6;
@@ -121,7 +164,6 @@ public class FrontEnd extends JFrame {
         });
         return toggle;
     }
-
     // Cuisine Selection Panel
     private JPanel createCuisinePanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
@@ -135,14 +177,11 @@ public class FrontEnd extends JFrame {
         questionLabel.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
         panel.add(questionLabel, BorderLayout.NORTH);
 
-        String[] cuisines = {"Italian", "Chinese", "Mexican", "Indian", "Japanese", "Thai", "French", "Greek", "Lebanese", "a", "b", "c", "d"};
-        JPanel optionsPanel = createOptionsPanel(cuisines);
-        JScrollPane scrollPane = new JScrollPane(optionsPanel);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        scrollPane.getViewport().setBackground(pureWhite);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(32);
-        // Fixed preferred size to show 2 rows (≈2 x 130 = 260 pixels)
-        scrollPane.setPreferredSize(new Dimension(800, 260));
+        String[] cuisines = {"Italian", "Chinese", "Mexican", "Indian", "Japanese", "Thai", "French", "Greek", "Lebanese", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q"};
+        // Use lazy loading scroll pane
+        JScrollPane scrollPane = createOptionsScrollPane(cuisines);
+        // We need to retrieve the panel later for processing selections
+        LazyOptionsPanel optionsPanel = (LazyOptionsPanel) scrollPane.getViewport().getView();
         panel.add(scrollPane, BorderLayout.CENTER);
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -198,12 +237,8 @@ public class FrontEnd extends JFrame {
         panel.add(questionLabel, BorderLayout.NORTH);
 
         String[] mealTypes = {"Breakfast", "Lunch", "Dinner", "Snack", "Brunch", "Midnight"};
-        JPanel optionsPanel = createOptionsPanel(mealTypes);
-        JScrollPane scrollPane = new JScrollPane(optionsPanel);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        scrollPane.getViewport().setBackground(pureWhite);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(32);
-        scrollPane.setPreferredSize(new Dimension(800, 260));
+        JScrollPane scrollPane = createOptionsScrollPane(mealTypes);
+        LazyOptionsPanel optionsPanel = (LazyOptionsPanel) scrollPane.getViewport().getView();
         panel.add(scrollPane, BorderLayout.CENTER);
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -258,12 +293,8 @@ public class FrontEnd extends JFrame {
         panel.add(questionLabel, BorderLayout.NORTH);
 
         String[] restrictions = {"Gluten-free", "Vegetarian", "Vegan", "Nut-free", "Dairy-free", "Halal", "Kosher"};
-        JPanel optionsPanel = createOptionsPanel(restrictions);
-        JScrollPane scrollPane = new JScrollPane(optionsPanel);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        scrollPane.getViewport().setBackground(pureWhite);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(32);
-        scrollPane.setPreferredSize(new Dimension(800, 260));
+        JScrollPane scrollPane = createOptionsScrollPane(restrictions);
+        LazyOptionsPanel optionsPanel = (LazyOptionsPanel) scrollPane.getViewport().getView();
         panel.add(scrollPane, BorderLayout.CENTER);
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -311,14 +342,9 @@ public class FrontEnd extends JFrame {
         questionLabel.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
         panel.add(questionLabel, BorderLayout.NORTH);
 
-        // Food items as toggle buttons in the same style
         String[] foodItems = {"Pizza", "Burger", "Sushi", "Pasta", "Salad"};
-        JPanel optionsPanel = createOptionsPanel(foodItems);
-        JScrollPane scrollPane = new JScrollPane(optionsPanel);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        scrollPane.getViewport().setBackground(pureWhite);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(32);
-        scrollPane.setPreferredSize(new Dimension(800, 260));
+        JScrollPane scrollPane = createOptionsScrollPane(foodItems);
+        LazyOptionsPanel optionsPanel = (LazyOptionsPanel) scrollPane.getViewport().getView();
         panel.add(scrollPane, BorderLayout.CENTER);
 
         // Enforce single selection using a ButtonGroup
