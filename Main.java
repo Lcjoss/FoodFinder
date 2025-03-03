@@ -1,4 +1,4 @@
-package com.company;
+package FoodFinder;
 import java.sql.*;
 
 public class Main {
