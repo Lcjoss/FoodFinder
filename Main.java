@@ -14,7 +14,7 @@ public class Main {
             while (rs.next()) {
                 String ingredientName = rs.getString(1); // name is first field
                 System.out.println("Ingredient name = " +
-                        studentName);
+                        ingredientName);
             }
         }catch (Exception e) {
             e.printStackTrace();
