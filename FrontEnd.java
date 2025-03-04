@@ -1,9 +1,11 @@
 package FoodFinder;
+import java.sql.*;
 
 import javax.swing.*;
 import javax.swing.border.Border;
 import java.awt.*;
 import java.awt.event.*;
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,6 +32,8 @@ public class FrontEnd extends JFrame {
     // Fonts using "Product Sans" (or fallback) – sizes increased
     private final Font baseFont = new Font("Product Sans", Font.PLAIN, 32);
     private final Font headerFont = new Font("Product Sans", Font.BOLD, 48);
+    static Connection connect;
+
 
     public FrontEnd() {
         setTitle("Food Selection App");
@@ -179,7 +183,26 @@ public class FrontEnd extends JFrame {
         questionLabel.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
         panel.add(questionLabel, BorderLayout.NORTH);
 
-        String[] cuisines = {"Italian", "Chinese", "Mexican", "Indian", "Japanese", "Thai", "French", "Greek", "Lebanese", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q"};
+        List<String> cuisineList = new ArrayList<>();
+
+
+        try {
+            Class.forName("com.mysql.jdbc.Driver");
+            connect = DriverManager.getConnection(
+                    "jdbc:mysql://ambari-node5.csc.calpoly.edu/foodfinder", "foodfinder", "password"); // Replace with database name (username), username, and password
+
+
+            Statement statement = connect.createStatement();
+            ResultSet rs = statement.executeQuery("SELECT distinct cuisine FROM Restaurant;");
+            while (rs.next()) {
+                String cuisineName = rs.getString(1); // name is first field
+                cuisineList.add(cuisineName);
+            }
+        }catch (Exception e) {
+            e.printStackTrace();
+        }
+        String[] cuisines = cuisineList.toArray(new String[cuisineList.size()]);
+
         // Use lazy loading scroll pane
         JScrollPane scrollPane = createOptionsScrollPane(cuisines);
         // We need to retrieve the panel later for processing selections
@@ -238,7 +261,23 @@ public class FrontEnd extends JFrame {
         questionLabel.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
         panel.add(questionLabel, BorderLayout.NORTH);
 
-        String[] mealTypes = {"Breakfast", "Lunch", "Dinner", "Snack", "Brunch", "Midnight"};
+        List<String> typeList = new ArrayList<>();
+        try {
+            Class.forName("com.mysql.jdbc.Driver");
+            connect = DriverManager.getConnection(
+                    "jdbc:mysql://ambari-node5.csc.calpoly.edu/foodfinder", "foodfinder", "password"); // Replace with database name (username), username, and password
+
+
+            Statement statement = connect.createStatement();
+            ResultSet rs = statement.executeQuery("SELECT distinct type FROM Menu;");
+            while (rs.next()) {
+                String typeName = rs.getString(1); // name is first field
+                typeList.add(typeName);
+            }
+        }catch (Exception e) {
+            e.printStackTrace();
+        }
+        String[] mealTypes = typeList.toArray(new String[typeList.size()]);
         JScrollPane scrollPane = createOptionsScrollPane(mealTypes);
         LazyOptionsPanel optionsPanel = (LazyOptionsPanel) scrollPane.getViewport().getView();
         panel.add(scrollPane, BorderLayout.CENTER);
