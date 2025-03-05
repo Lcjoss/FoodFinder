@@ -21,7 +21,7 @@ public class FrontEnd extends JFrame {
     private List<String> selectedCuisines = new ArrayList<>();
     private List<String> selectedMealTypes = new ArrayList<>();
     private List<String> selectedRestrictions = new ArrayList<>();
-    private String selectedFoodItem;
+    private List<String> selectedFoodItems = new ArrayList<>();
 
     // Colors for styling
     private final Color pureWhite = Color.WHITE;
@@ -388,18 +388,6 @@ public class FrontEnd extends JFrame {
         LazyOptionsPanel optionsPanel = (LazyOptionsPanel) scrollPane.getViewport().getView();
         panel.add(scrollPane, BorderLayout.CENTER);
 
-        // Enforce single selection using a ButtonGroup
-        ButtonGroup foodGroup = new ButtonGroup();
-        for (Component comp : optionsPanel.getComponents()) {
-            if (comp instanceof JPanel) {
-                for (Component inner : ((JPanel) comp).getComponents()) {
-                    if (inner instanceof SimpleToggleButton) {
-                        foodGroup.add((SimpleToggleButton) inner);
-                    }
-                }
-            }
-        }
-
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonPanel.setBackground(pureWhite);
         JButton backButton = new JButton("Back");
@@ -409,26 +397,26 @@ public class FrontEnd extends JFrame {
 
         backButton.addActionListener(e -> navigateBack());
         confirmButton.addActionListener(e -> {
-            String selected = null;
+            selectedFoodItems.clear();
+            boolean selected = false;
             for (Component comp : optionsPanel.getComponents()) {
                 if (comp instanceof JPanel) {
                     for (Component inner : ((JPanel) comp).getComponents()) {
                         if (inner instanceof SimpleToggleButton) {
                             SimpleToggleButton tb = (SimpleToggleButton) inner;
                             if (tb.isSelected()) {
-                                selected = tb.getText();
-                                break;
+                                selectedFoodItems.add(tb.getText());
+                                selected = true;
                             }
                         }
                     }
                 }
-                if (selected != null) break;
             }
-            if (selected == null) {
-                JOptionPane.showMessageDialog(this, "Please select a food item.", "Selection Required", JOptionPane.WARNING_MESSAGE);
+            if (!selected) {
+                JOptionPane.showMessageDialog(this, "Please select at least one food item.", "Selection Required", JOptionPane.WARNING_MESSAGE);
             } else {
-                selectedFoodItem = selected;
-                cardLayout.show(cardPanel, "results");
+                currentStep++;
+                cardLayout.show(cardPanel, getCardName(currentStep));
                 updateProgressLabels();
             }
         });
@@ -450,20 +438,20 @@ public class FrontEnd extends JFrame {
         resultsArea.setForeground(black);
         resultsArea.setFont(baseFont);
         StringBuilder results = new StringBuilder("Matching Restaurants:\n\n");
-        if (selectedFoodItem != null) {
-            if (selectedFoodItem.equals("Pizza") && selectedCuisines.contains("Italian")) {
+        if (selectedFoodItems != null) {
+            if (selectedFoodItems.contains("Pizza") && selectedCuisines.contains("Italian")) {
                 results.append("Restaurant: Bella Napoli\n")
-                        .append("Item: ").append(selectedFoodItem).append("\n")
+                        .append("Item: ").append(selectedFoodItems).append("\n")
                         .append("Ingredients: Tomato, Mozzarella, Basil\n\n");
             }
-            if (selectedFoodItem.equals("Burger")) {
+            if (selectedFoodItems.contains("Burger")) {
                 results.append("Restaurant: Burger Bonanza\n")
-                        .append("Item: ").append(selectedFoodItem).append("\n")
+                        .append("Item: ").append(selectedFoodItems).append("\n")
                         .append("Ingredients: Beef, Lettuce, Tomato, Bun\n\n");
             }
-            if (selectedFoodItem.equals("Sushi") && selectedCuisines.contains("Japanese")) {
+            if (selectedFoodItems.contains("Sushi") && selectedCuisines.contains("Japanese")) {
                 results.append("Restaurant: Sushi Samurai\n")
-                        .append("Item: ").append(selectedFoodItem).append("\n")
+                        .append("Item: ").append(selectedFoodItems).append("\n")
                         .append("Ingredients: Rice, Fish, Seaweed\n\n");
             }
         }
@@ -482,7 +470,7 @@ public class FrontEnd extends JFrame {
             selectedCuisines.clear();
             selectedMealTypes.clear();
             selectedRestrictions.clear();
-            selectedFoodItem = null;
+            selectedFoodItems.clear();
             cardLayout.show(cardPanel, "cuisine");
             updateProgressLabels();
         });
