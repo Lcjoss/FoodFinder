@@ -7,6 +7,7 @@ import java.awt.*;
 import java.awt.event.*;
 import java.sql.Connection;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class FrontEnd extends JFrame {
@@ -326,14 +327,33 @@ public class FrontEnd extends JFrame {
         panel.setBackground(pureWhite);
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        JLabel questionLabel = new JLabel("Do you have any allergens or dietary restrictions?");
+        JLabel questionLabel = new JLabel("Select allergens or dietary restrictions?");
         questionLabel.setForeground(black);
         questionLabel.setFont(headerFont);
         questionLabel.setHorizontalAlignment(SwingConstants.CENTER);
         questionLabel.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
         panel.add(questionLabel, BorderLayout.NORTH);
 
-        String[] restrictions = {"Gluten-free", "Vegetarian", "Vegan", "Nut-free", "Dairy-free", "Halal", "Kosher"};
+        List<String> restrictionList = new ArrayList<>();
+
+
+        try {
+            Class.forName("com.mysql.jdbc.Driver");
+            connect = DriverManager.getConnection(
+                    "jdbc:mysql://ambari-node5.csc.calpoly.edu/foodfinder", "foodfinder", "password"); // Replace with database name (username), username, and password
+
+
+            Statement statement = connect.createStatement();
+            ResultSet rs = statement.executeQuery("SELECT distinct ingName FROM Allergen;");
+            while (rs.next()) {
+                String restriction = rs.getString(1); // name is first field
+                restrictionList.add(restriction);
+            }
+        }catch (Exception e) {
+            e.printStackTrace();
+        }
+        String[] restrictions = restrictionList.toArray(new String[restrictionList.size()]);
+
         JScrollPane scrollPane = createOptionsScrollPane(restrictions);
         LazyOptionsPanel optionsPanel = (LazyOptionsPanel) scrollPane.getViewport().getView();
         panel.add(scrollPane, BorderLayout.CENTER);
@@ -383,7 +403,31 @@ public class FrontEnd extends JFrame {
         questionLabel.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
         panel.add(questionLabel, BorderLayout.NORTH);
 
-        String[] foodItems = {"Pizza", "Burger", "Sushi", "Pasta", "Salad"};
+        List<String> foodList = new ArrayList<>();
+        try {
+            Class.forName("com.mysql.jdbc.Driver");
+            connect = DriverManager.getConnection(
+                    "jdbc:mysql://ambari-node5.csc.calpoly.edu/foodfinder", "foodfinder", "password"); // Replace with database name (username), username, and password
+
+
+            Statement statement = connect.createStatement();
+            String restaurants = "SELECT rid FROM Restaurant WHERE cuisine IN (" +
+                    String.join(",", Collections.nCopies(selectedCuisines.size(), "?")) + ")))";
+            String menus= "Select mid from Menu where type in (" +
+                    String.join(",", Collections.nCopies(selectedMealTypes.size(), "?")) + ")" + "and rid=(";
+            String restrictions="Select I.iname from Item I join Recipe R join Allergen A where ingName not in " +
+                    String.join(",", Collections.nCopies(selectedRestrictions.size(), "?")) + ") and mid=(";
+            String sql= restrictions+menus+restaurants;
+            ResultSet rs = statement.executeQuery(sql);
+            while (rs.next()) {
+                String itemName = rs.getString(1); // name is first field
+                foodList.add(itemName);
+            }
+        }catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        String[] foodItems = foodList.toArray(new String[foodList.size()]);
         JScrollPane scrollPane = createOptionsScrollPane(foodItems);
         LazyOptionsPanel optionsPanel = (LazyOptionsPanel) scrollPane.getViewport().getView();
         panel.add(scrollPane, BorderLayout.CENTER);
