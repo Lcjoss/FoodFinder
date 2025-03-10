@@ -1,81 +1,81 @@
-At Bites
-Blackhorse
-Blaze Pizza
-Bliss Cafe
-Boba Stop
-Breakfast Buzz
-Brown Butter Cookie Company
-Buffalo Wild Wings
-Capriotti's
-Chipotle
-Cool Cat Cafe
-Copper Cafe (Madonna Inn)
-Cowboy Cookies & Ice Cream
-Doc Burnstein's
-Domino's
-El Pollo Loco
-Firestone
-Flour House
-Goshi Japanese Restaurant
-Grape Leaf*
-Haha Sushi and Ramen
-High St.
-House of Bagels
-Ike's Love & Sandwiches
-insomnia cookies
-Jack in the Box
-Kin Coffee
-Kona's Deli
-Kreuzberg
-Kreuzberg at Night
-Lahaina's
-LOKUM
-louisas place
-Luna Red
-Mcconnells
-McDonalds
-Milk In It
-Mr. Pickles
-Nite Creamery
-Nobu Hawaiian BBQ
-Oki Momo
-Olive Garden
-Panda Express
-Papa's Thai
-Petra
-Poke Chef
-Pokirito
-Popeyes
-Raku Ramen
-Rocket Fizz
-San Luis Fish & BBQ
-san luis taqueria
-Scout's
-Shalimar
-Shin's Sushi
-SLO Delicious Bake Shop
-Slo Do Co
-SLO Froyo
-SLO Provisions
-SLO Sweets
-Splash Cafe
-Sunshine Donuts
-Sushiya
-Sweetie Cup
-Taco Bell
-Taco Rico
-Taft st. Coffee & Pastries
-Taqueria San Miguel
-Taqueria Santa Cruz
-Teazer World Teamarket
-Thai Palace
-The Habit
-Tonita's Mexican
-Tortilla Town
-urbane cafe
-Wingstop
-woodstock's
-Ziggy's
+At Bites,
+Blackhorse,
+Blaze Pizza,
+Bliss Cafe,
+Boba Stop,
+Breakfast Buzz,
+Brown Butter Cookie Company,
+Buffalo Wild Wings,
+Capriotti's,
+Chipotle,
+Cool Cat Cafe,
+Copper Cafe (Madonna Inn),
+Cowboy Cookies & Ice Cream,
+Doc Burnstein's,
+Domino's,
+El Pollo Loco,
+Firestone,
+Flour House,
+Goshi Japanese Restaurant,
+Grape Leaf*,
+Haha Sushi and Ramen,
+High St.,
+House of Bagels,
+Ike's Love & Sandwiches,
+insomnia cookies,
+Jack in the Box,
+Kin Coffee,
+Kona's Deli,
+Kreuzberg,
+Kreuzberg at Night,
+Lahaina's,
+LOKUM,
+louisas place,
+Luna Red,
+Mcconnells,
+McDonalds,
+Milk In It,
+Mr. Pickles,
+Nite Creamery,
+Nobu Hawaiian BBQ,
+Oki Momo,
+Olive Garden,
+Panda Express,
+Papa's Thai,
+Petra,
+Poke Chef,
+Pokirito,
+Popeyes,
+Raku Ramen,
+Rocket Fizz,
+San Luis Fish & BBQ,
+san luis taqueria,
+Scout's,
+Shalimar,
+Shin's Sushi,
+SLO Delicious Bake Shop,
+Slo Do Co,
+SLO Froyo,
+SLO Provisions,
+SLO Sweets,
+Splash Cafe,
+Sunshine Donuts,
+Sushiya,
+Sweetie Cup,
+Taco Bell,
+Taco Rico,
+Taft st. Coffee & Pastries,
+Taqueria San Miguel,
+Taqueria Santa Cruz,
+Teazer World Teamarket,
+Thai Palace,
+The Habit,
+Tonita's Mexican,
+Tortilla Town,
+urbane cafe,
+Wingstop,
+woodstock's,
+Ziggy's,
 |
 B-
 A
