@@ -1,5 +1,6 @@
 package FoodFinder;
 import java.sql.*;
+import java.util.Collections;
 
 public class Main {
     static   Connection connect;
@@ -9,12 +10,12 @@ public class Main {
             connect = DriverManager.getConnection(
                     "jdbc:mysql://ambari-node5.csc.calpoly.edu/foodfinder", "foodfinder", "password"); // Replace with database name (username), username, and password
 
+
             Statement statement = connect.createStatement();
-            ResultSet rs = statement.executeQuery("SELECT * FROM Ingredient;");
+            String sql= "Select * from Allergen;";
+            ResultSet rs = statement.executeQuery(sql);
             while (rs.next()) {
-                String ingredientName = rs.getString(1); // name is first field
-                System.out.println("Ingredient name = " +
-                        studentName);
+                System.out.println(rs.getString(2)); // name is first field
             }
         }catch (Exception e) {
             e.printStackTrace();
