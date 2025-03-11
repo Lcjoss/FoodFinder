@@ -61,6 +61,12 @@ public class FrontEnd extends JFrame {
     private JList<Restaurant> resultsList;
     private Map<Restaurant, String> restaurantMatchingItems = new HashMap<>();
 
+    // References to dynamically updated panels/buttons
+    private PagedSearchPanel foodOptionsPanel;
+    private JButton foodContinueButton;
+    private PagedSearchPanel mealTypeOptionsPanel;
+    private JPanel mealTypePanel;
+
     // ----------------- Domain Object Classes -----------------
     static class Restaurant {
         int id;
@@ -258,6 +264,63 @@ public class FrontEnd extends JFrame {
         return foodItems;
     }
 
+    // New method: Load food items filtered by cuisine, meal type, and restrictions (allergens)
+    private List<String> loadFilteredFoodItems(List<String> selectedCuisines,
+                                               List<String> selectedMealTypes,
+                                               List<String> selectedRestrictions) {
+        List<String> foodItems = new ArrayList<>();
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT DISTINCT I.iname ")
+                .append("FROM Restaurant R ")
+                .append("JOIN Menu M ON R.rid = M.rid ")
+                .append("JOIN Item I ON M.mID = I.mID ")
+                .append("WHERE 1=1 ");
+        if (!selectedCuisines.isEmpty()) {
+            sql.append("AND R.cuisine IN (")
+                    .append(String.join(", ", Collections.nCopies(selectedCuisines.size(), "?")))
+                    .append(") ");
+        }
+        if (!selectedMealTypes.isEmpty()) {
+            sql.append("AND M.type IN (")
+                    .append(String.join(", ", Collections.nCopies(selectedMealTypes.size(), "?")))
+                    .append(") ");
+        }
+        if (!selectedRestrictions.isEmpty()) {
+            sql.append("AND NOT EXISTS (")
+                    .append("SELECT 1 FROM Recipe RC JOIN Allergen A ON RC.ingID = A.ingID ")
+                    .append("WHERE RC.mID = I.mID AND RC.iname = I.iname AND A.ingName IN (")
+                    .append(String.join(", ", Collections.nCopies(selectedRestrictions.size(), "?")))
+                    .append(")) ");
+        }
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql.toString())) {
+            int index = 1;
+            if (!selectedCuisines.isEmpty()) {
+                for (String c : selectedCuisines) {
+                    pstmt.setString(index++, c);
+                }
+            }
+            if (!selectedMealTypes.isEmpty()) {
+                for (String m : selectedMealTypes) {
+                    pstmt.setString(index++, m);
+                }
+            }
+            if (!selectedRestrictions.isEmpty()) {
+                for (String r : selectedRestrictions) {
+                    pstmt.setString(index++, r);
+                }
+            }
+            ResultSet rs = pstmt.executeQuery();
+            while(rs.next()) {
+                foodItems.add(rs.getString("iname"));
+            }
+            rs.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return foodItems;
+    }
+
     // -------------------- SQL Filtering Methods --------------------
     private List<Restaurant> loadFilteredRestaurants(List<String> selectedCuisines,
                                                      List<String> selectedMealTypes,
@@ -419,7 +482,9 @@ public class FrontEnd extends JFrame {
         cardPanel = new JPanel(cardLayout);
         cardPanel.setBackground(white);
         cardPanel.add(createCuisinePanel(), "cuisine");
-        cardPanel.add(createMealTypePanel(), "meal");
+        // Create and store the meal type panel for later updating
+        mealTypePanel = createMealTypePanel();
+        cardPanel.add(mealTypePanel, "meal");
         cardPanel.add(createRestrictionsPanel(), "restrictions");
         cardPanel.add(createFoodItemPanel(), "food");
         cardPanel.add(createResultsPanel(), "results");
@@ -516,6 +581,8 @@ public class FrontEnd extends JFrame {
                 JOptionPane.showMessageDialog(this, "Please select at least one cuisine.", "Selection Required", JOptionPane.WARNING_MESSAGE);
             } else {
                 selectedCuisines.addAll(sel);
+                // Update the meal type panel based on the selected cuisines.
+                updateMealTypePanel();
                 currentStep++;
                 cardLayout.show(cardPanel, getCardName(currentStep));
                 updateProgressLabels();
@@ -525,6 +592,35 @@ public class FrontEnd extends JFrame {
         buttonPanel.add(continueButton);
         panel.add(buttonPanel, BorderLayout.SOUTH);
         return panel;
+    }
+
+    // This method rebuilds the meal type options based on the selected cuisines.
+    private void updateMealTypePanel() {
+        List<String> typeList = new ArrayList<>();
+        if (!selectedCuisines.isEmpty()){
+            StringBuilder sql = new StringBuilder();
+            sql.append("SELECT DISTINCT M.type FROM Menu M JOIN Restaurant R ON M.rid = R.rid WHERE R.cuisine IN (");
+            sql.append(String.join(", ", Collections.nCopies(selectedCuisines.size(), "?")));
+            sql.append(")");
+            try (Connection conn = getConnection();
+                 PreparedStatement pstmt = conn.prepareStatement(sql.toString())) {
+                int index = 1;
+                for (String c : selectedCuisines) {
+                    pstmt.setString(index++, c);
+                }
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        typeList.add(rs.getString(1));
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        String[] mealTypes = typeList.toArray(new String[0]);
+        if (mealTypeOptionsPanel != null) {
+            mealTypeOptionsPanel.updateOptions(mealTypes);
+        }
     }
 
     private JPanel createMealTypePanel() {
@@ -537,20 +633,44 @@ public class FrontEnd extends JFrame {
         questionLabel.setForeground(darkGray);
         panel.add(questionLabel, BorderLayout.NORTH);
 
+        // At this point, selectedCuisines has been set by the previous step.
+        // Query the meal type options for the chosen cuisines.
         List<String> typeList = new ArrayList<>();
-        String sql = "SELECT DISTINCT type FROM Menu";
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                typeList.add(rs.getString(1));
+        if (!selectedCuisines.isEmpty()){
+            StringBuilder sql = new StringBuilder();
+            sql.append("SELECT DISTINCT M.type FROM Menu M JOIN Restaurant R ON M.rid = R.rid WHERE R.cuisine IN (");
+            sql.append(String.join(", ", Collections.nCopies(selectedCuisines.size(), "?")));
+            sql.append(")");
+            try (Connection conn = getConnection();
+                 PreparedStatement pstmt = conn.prepareStatement(sql.toString())) {
+                int index = 1;
+                for(String c: selectedCuisines){
+                    pstmt.setString(index++, c);
+                }
+                try (ResultSet rs = pstmt.executeQuery()){
+                    while(rs.next()){
+                        typeList.add(rs.getString(1));
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-        } catch (Exception e) {
-            typeList = Arrays.asList("Breakfast", "Lunch", "Dinner", "Dessert", "Brunch", "Grill", "Salads");
+        } else {
+            // Fallback if no cuisines are selected (should not happen)
+            String sql = "SELECT DISTINCT type FROM Menu";
+            try (Connection conn = getConnection();
+                 Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql)) {
+                while (rs.next()){
+                    typeList.add(rs.getString(1));
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
         String[] mealTypes = typeList.toArray(new String[0]);
-        PagedSearchPanel optionsPanel = new PagedSearchPanel(mealTypes);
-        panel.add(optionsPanel, BorderLayout.CENTER);
+        mealTypeOptionsPanel = new PagedSearchPanel(mealTypes);
+        panel.add(mealTypeOptionsPanel, BorderLayout.CENTER);
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonPanel.setBackground(white);
@@ -561,7 +681,7 @@ public class FrontEnd extends JFrame {
         backButton.addActionListener(e -> navigateBack());
         continueButton.addActionListener(e -> {
             selectedMealTypes.clear();
-            List<String> sel = optionsPanel.getSelectedOptions();
+            List<String> sel = mealTypeOptionsPanel.getSelectedOptions();
             if (sel.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Please select at least one meal type.", "Selection Required", JOptionPane.WARNING_MESSAGE);
             } else {
@@ -603,6 +723,17 @@ public class FrontEnd extends JFrame {
             selectedRestrictions.clear();
             List<String> sel = optionsPanel.getSelectedOptions();
             selectedRestrictions.addAll(sel);
+            // Update the food item panel with filtered options based on selected cuisines, meal types, and restrictions:
+            List<String> foodList = loadFilteredFoodItems(selectedCuisines, selectedMealTypes, selectedRestrictions);
+            if (foodOptionsPanel != null) {
+                foodOptionsPanel.updateOptions(foodList.toArray(new String[0]));
+            }
+            // Gray out (disable) the Continue button on the Food panel if no food items were found.
+            if (foodList.isEmpty()) {
+                foodContinueButton.setEnabled(false);
+            } else {
+                foodContinueButton.setEnabled(true);
+            }
             currentStep++;
             cardLayout.show(cardPanel, getCardName(currentStep));
             updateProgressLabels();
@@ -623,21 +754,21 @@ public class FrontEnd extends JFrame {
         questionLabel.setForeground(darkGray);
         panel.add(questionLabel, BorderLayout.NORTH);
 
-        List<String> foodList = loadFoodItems();
-        String[] foodItems = foodList.toArray(new String[0]);
-        PagedSearchPanel optionsPanel = new PagedSearchPanel(foodItems);
-        panel.add(optionsPanel, BorderLayout.CENTER);
+        // Initialize with an empty array; it will be updated when leaving the restrictions panel.
+        foodOptionsPanel = new PagedSearchPanel(new String[0]);
+        panel.add(foodOptionsPanel, BorderLayout.CENTER);
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonPanel.setBackground(white);
         JButton backButton = new JButton("Back");
-        JButton continueButton = new JButton("Continue");
+        // Use the class-level continue button reference.
+        foodContinueButton = new JButton("Continue");
         styleButton(backButton);
-        styleButton(continueButton);
+        styleButton(foodContinueButton);
         backButton.addActionListener(e -> navigateBack());
-        continueButton.addActionListener(e -> {
+        foodContinueButton.addActionListener(e -> {
             selectedFoodItems.clear();
-            List<String> sel = optionsPanel.getSelectedOptions();
+            List<String> sel = foodOptionsPanel.getSelectedOptions();
             if (sel.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Please select at least one food item.", "Selection Required", JOptionPane.WARNING_MESSAGE);
             } else {
@@ -648,7 +779,7 @@ public class FrontEnd extends JFrame {
             }
         });
         buttonPanel.add(backButton);
-        buttonPanel.add(continueButton);
+        buttonPanel.add(foodContinueButton);
         panel.add(buttonPanel, BorderLayout.SOUTH);
         return panel;
     }
@@ -771,8 +902,6 @@ public class FrontEnd extends JFrame {
         mapViewer.addMouseListener(mia);
         mapViewer.addMouseMotionListener(mia);
         mapViewer.addMouseWheelListener(new ZoomMouseWheelListenerCursor(mapViewer));
-
-        // Removed mouse listener for clicking waypoints as it was deemed unnecessary.
 
         return mapViewer;
     }
@@ -1053,6 +1182,18 @@ public class FrontEnd extends JFrame {
             rightButton.setEnabled((currentPage + 1) * itemsPerPage < filteredOptions.size());
             gridPanel.revalidate();
             gridPanel.repaint();
+        }
+
+        // New method to update the options dynamically
+        public void updateOptions(String[] options) {
+            originalOptions = new ArrayList<>(Arrays.asList(options));
+            filteredOptions = new ArrayList<>(originalOptions);
+            selectionMap.clear();
+            for (String opt : originalOptions) {
+                selectionMap.put(opt, false);
+            }
+            currentPage = 0;
+            refreshGrid();
         }
 
         public List<String> getSelectedOptions() {
