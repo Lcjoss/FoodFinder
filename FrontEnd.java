@@ -28,14 +28,12 @@ public class FrontEnd extends JFrame {
 
     // ===================== Fields and Global State =====================
     private final Color accentColor = Color.decode("#FF6666");
-    // Add this new field near your other fields:
-    private List<Restaurant> currentValidRestaurants = new ArrayList<>();
-
     private final Color white = Color.WHITE;
     private final Color darkGray = Color.DARK_GRAY;
     private final Font headerFont = new Font("Segoe UI", Font.BOLD, 54);
     private final Font optionFont = new Font("Segoe UI", Font.PLAIN, 24);
 
+    private List<Restaurant> currentValidRestaurants = new ArrayList<>();
     private CardLayout cardLayout;
     private JPanel cardPanel;
     private JLabel[] progressLabels;
@@ -47,69 +45,58 @@ public class FrontEnd extends JFrame {
     private List<String> selectedRestrictions = new ArrayList<>();
     private List<String> selectedFoodItems = new ArrayList<>();
 
-    // The following fields hold the restaurant, menu, and item the user has chosen later on.
+    // Selected objects from later steps.
     private Restaurant selectedRestaurant;
     private Menu selectedMenu;
     private MenuItem selectedItem;
 
-    // Database connection (if used)
-    static Connection connect;
+    // List of restaurants loaded from the database.
+    private List<Restaurant> allRestaurants;
 
-    // Sample restaurants used for the map and results
-    private List<Restaurant> allRestaurants = Arrays.asList(
-            new Restaurant("Cool Cat Cafe", "$$", "A", 35.26148263879988, -120.65074302104684),
-            new Restaurant("Copper Cafe (Madonna Inn)", "$$$", "A", 35.26754456858061, -120.67471354803263),
-            new Restaurant("Cowboy Cookies & Ice Cream", "$", "B+", 35.28003629861211, -120.66350028851153),
-            new Restaurant("Doc Burnstein's", "$$", "A", 35.28041943934528, -120.66252590200459),
-            new Restaurant("Domino's", "$", "B+", 35.294668938163205, -120.67057371919572),
-            new Restaurant("El Pollo Loco", "$$", "B", 35.252762644552206, -120.68540577501963)
-    );
-
-    // Demo mapping of restaurants to menus
-    private Map<String, List<Menu>> restaurantMenus = new HashMap<>();
-
-    // Field to store the map viewer so we can update its waypoints.
+    // Map viewer and related waypoint state.
     private JXMapViewer resultsMapViewer;
-
-    // Hold the set of waypoints (updated when filtering valid restaurants).
     private Set<RestaurantWaypoint> restaurantWaypoints;
 
-    // Instead of a JTextArea, we now use a JList for clickable results.
+    // JList for clickable results.
     private JList<Restaurant> resultsList;
-    // This map holds the extra info (matching menu items) per restaurant.
     private Map<Restaurant, String> restaurantMatchingItems = new HashMap<>();
 
-    // ----------------- Inner classes for domain objects -----------------
-
-    // Restaurant class
+    // ----------------- Domain Object Classes -----------------
     static class Restaurant {
-        String name, price, rating;
+        int id;
+        String name, cuisine, price, rating;
         double lat, lon;
 
-        public Restaurant(String name, String price, String rating, double lat, double lon) {
+        public Restaurant(int id, String name, String cuisine, String price, String rating, double lat, double lon) {
+            this.id = id;
             this.name = name;
+            this.cuisine = cuisine;
             this.price = price;
             this.rating = rating;
             this.lat = lat;
             this.lon = lon;
         }
+
+        @Override
+        public String toString() {
+            return name;
+        }
     }
 
-    // Menu class
     static class Menu {
-        String name;
+        int id;
+        String type;
         List<MenuItem> items;
 
-        public Menu(String name, List<MenuItem> items) {
-            this.name = name;
+        public Menu(int id, String type, List<MenuItem> items) {
+            this.id = id;
+            this.type = type;
             this.items = items;
         }
     }
 
-    // MenuItem class
     static class MenuItem {
-        String name;
-        String recipe;
+        String name, recipe;
         List<String> allergens;
 
         public MenuItem(String name, String recipe, List<String> allergens) {
@@ -120,8 +107,6 @@ public class FrontEnd extends JFrame {
     }
 
     // ----------------- Custom Waypoint and Renderer -----------------
-
-    // Custom Waypoint that holds a Restaurant reference
     static class RestaurantWaypoint extends DefaultWaypoint {
         Restaurant restaurant;
 
@@ -131,18 +116,15 @@ public class FrontEnd extends JFrame {
         }
     }
 
-    // Custom renderer that draws a larger, darker blue circle with a white dollar sign inside.
     static class RestaurantWaypointRenderer implements WaypointRenderer<RestaurantWaypoint> {
         @Override
         public void paintWaypoint(Graphics2D g, JXMapViewer map, RestaurantWaypoint wp) {
             Point2D pt = map.getTileFactory().geoToPixel(wp.getPosition(), map.getZoom());
             int x = (int) pt.getX();
             int y = (int) pt.getY();
-            int radius = 10; // increased size
-            // Draw a darker blue circle
+            int radius = 10;
             g.setColor(new Color(0, 0, 139)); // dark blue
             g.fillOval(x - radius, y - radius, 2 * radius, 2 * radius);
-            // Draw a white dollar sign in the center.
             g.setColor(Color.WHITE);
             Font font = g.getFont().deriveFont(Font.BOLD, 16f);
             g.setFont(font);
@@ -154,6 +136,263 @@ public class FrontEnd extends JFrame {
         }
     }
 
+    // -------------------- Database Helper Methods --------------------
+    private Connection getConnection() throws Exception {
+        Class.forName("com.mysql.jdbc.Driver");
+        return DriverManager.getConnection("jdbc:mysql://ambari-node5.csc.calpoly.edu/foodfinder", "foodfinder", "password");
+    }
+
+    private List<Restaurant> loadRestaurants() {
+        List<Restaurant> list = new ArrayList<>();
+        String sql = "SELECT rid, rname, cuisine, price, coordinates, rating FROM Restaurant";
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                int id = rs.getInt("rid");
+                String name = rs.getString("rname");
+                String cuisine = rs.getString("cuisine");
+                String price = rs.getString("price");
+                String rating = rs.getString("rating");
+                String coords = rs.getString("coordinates");
+                double lat = 0.0, lon = 0.0;
+                if (coords != null && coords.contains(",")) {
+                    String[] parts = coords.split(",");
+                    lat = Double.parseDouble(parts[0].trim());
+                    lon = Double.parseDouble(parts[1].trim());
+                }
+                list.add(new Restaurant(id, name, cuisine, price, rating, lat, lon));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    private List<Menu> loadMenus(int restaurantId) {
+        List<Menu> menus = new ArrayList<>();
+        String sql = "SELECT mID, type FROM Menu WHERE rid = ?";
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, restaurantId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    int menuId = rs.getInt("mID");
+                    String type = rs.getString("type");
+                    List<MenuItem> items = loadMenuItems(menuId);
+                    menus.add(new Menu(menuId, type, items));
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return menus;
+    }
+
+    private List<MenuItem> loadMenuItems(int menuId) {
+        List<MenuItem> items = new ArrayList<>();
+        String sql = "SELECT iname FROM Item WHERE mID = ?";
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, menuId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    String itemName = rs.getString("iname");
+                    List<String> allergens = loadItemAllergens(menuId, itemName);
+                    String recipe = allergens.isEmpty() ? "No recipe details available."
+                            : "Ingredients: " + String.join(", ", allergens);
+                    items.add(new MenuItem(itemName, recipe, allergens));
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return items;
+    }
+
+    private List<String> loadItemAllergens(int menuId, String itemName) {
+        List<String> allergens = new ArrayList<>();
+        String sql = "SELECT A.ingName FROM Recipe R JOIN Allergen A ON R.ingID = A.ingID WHERE R.mID = ? AND R.iname = ?";
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, menuId);
+            pstmt.setString(2, itemName);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    allergens.add(rs.getString("ingName"));
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return allergens;
+    }
+
+    private List<String> loadAllergens() {
+        List<String> allergens = new ArrayList<>();
+        String sql = "SELECT DISTINCT ingName FROM Allergen";
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                allergens.add(rs.getString("ingName"));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return allergens;
+    }
+
+    private List<String> loadFoodItems() {
+        List<String> foodItems = new ArrayList<>();
+        String sql = "SELECT DISTINCT iname FROM Item";
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                foodItems.add(rs.getString("iname"));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return foodItems;
+    }
+
+    // -------------------- SQL Filtering Methods --------------------
+    private List<Restaurant> loadFilteredRestaurants(List<String> selectedCuisines,
+                                                     List<String> selectedMealTypes,
+                                                     List<String> selectedFoodItems,
+                                                     List<String> selectedRestrictions) {
+        List<Restaurant> list = new ArrayList<>();
+        if (selectedFoodItems.isEmpty()) return list; // Food item filter is required.
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT DISTINCT R.rid, R.rname, R.cuisine, R.price, R.coordinates, R.rating ")
+                .append("FROM Restaurant R ")
+                .append("JOIN Menu M ON R.rid = M.rid ")
+                .append("JOIN Item I ON M.mID = I.mID ")
+                .append("WHERE 1=1 ");
+        if (!selectedCuisines.isEmpty()) {
+            sql.append("AND R.cuisine IN (")
+                    .append(String.join(", ", Collections.nCopies(selectedCuisines.size(), "?")))
+                    .append(") ");
+        }
+        if (!selectedMealTypes.isEmpty()) {
+            sql.append("AND M.type IN (")
+                    .append(String.join(", ", Collections.nCopies(selectedMealTypes.size(), "?")))
+                    .append(") ");
+        }
+        sql.append("AND (");
+        for (int i = 0; i < selectedFoodItems.size(); i++) {
+            if (i > 0) sql.append(" OR ");
+            sql.append("LOWER(I.iname) LIKE ?");
+        }
+        sql.append(") ");
+        if (!selectedRestrictions.isEmpty()) {
+            sql.append("AND NOT EXISTS (")
+                    .append("SELECT 1 FROM Recipe RC JOIN Allergen A ON RC.ingID = A.ingID ")
+                    .append("WHERE RC.mID = I.mID AND RC.iname = I.iname AND A.ingName IN (")
+                    .append(String.join(", ", Collections.nCopies(selectedRestrictions.size(), "?")))
+                    .append(")) ");
+        }
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql.toString())) {
+            int index = 1;
+            if (!selectedCuisines.isEmpty()) {
+                for (String c : selectedCuisines) {
+                    pstmt.setString(index++, c);
+                }
+            }
+            if (!selectedMealTypes.isEmpty()) {
+                for (String m : selectedMealTypes) {
+                    pstmt.setString(index++, m);
+                }
+            }
+            for (String f : selectedFoodItems) {
+                pstmt.setString(index++, "%" + f.toLowerCase() + "%");
+            }
+            if (!selectedRestrictions.isEmpty()) {
+                for (String r : selectedRestrictions) {
+                    pstmt.setString(index++, r);
+                }
+            }
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                int id = rs.getInt("rid");
+                String name = rs.getString("rname");
+                String cuisine = rs.getString("cuisine");
+                String price = rs.getString("price");
+                String rating = rs.getString("rating");
+                String coords = rs.getString("coordinates");
+                double lat = 0.0, lon = 0.0;
+                if (coords != null && coords.contains(",")) {
+                    String[] parts = coords.split(",");
+                    lat = Double.parseDouble(parts[0].trim());
+                    lon = Double.parseDouble(parts[1].trim());
+                }
+                list.add(new Restaurant(id, name, cuisine, price, rating, lat, lon));
+            }
+            rs.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    private List<String> loadMatchingItemsForRestaurant(int restaurantId,
+                                                        List<String> selectedMealTypes,
+                                                        List<String> selectedFoodItems,
+                                                        List<String> selectedRestrictions) {
+        List<String> items = new ArrayList<>();
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT DISTINCT I.iname ")
+                .append("FROM Menu M JOIN Item I ON M.mID = I.mID ")
+                .append("WHERE M.rid = ? ");
+        if (!selectedMealTypes.isEmpty()) {
+            sql.append("AND M.type IN (")
+                    .append(String.join(", ", Collections.nCopies(selectedMealTypes.size(), "?")))
+                    .append(") ");
+        }
+        sql.append("AND (");
+        for (int i = 0; i < selectedFoodItems.size(); i++) {
+            if (i > 0) sql.append(" OR ");
+            sql.append("LOWER(I.iname) LIKE ?");
+        }
+        sql.append(") ");
+        if (!selectedRestrictions.isEmpty()) {
+            sql.append("AND NOT EXISTS (")
+                    .append("SELECT 1 FROM Recipe RC JOIN Allergen A ON RC.ingID = A.ingID ")
+                    .append("WHERE RC.mID = I.mID AND RC.iname = I.iname AND A.ingName IN (")
+                    .append(String.join(", ", Collections.nCopies(selectedRestrictions.size(), "?")))
+                    .append(")) ");
+        }
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql.toString())) {
+            int index = 1;
+            pstmt.setInt(index++, restaurantId);
+            if (!selectedMealTypes.isEmpty()) {
+                for (String m : selectedMealTypes) {
+                    pstmt.setString(index++, m);
+                }
+            }
+            for (String f : selectedFoodItems) {
+                pstmt.setString(index++, "%" + f.toLowerCase() + "%");
+            }
+            if (!selectedRestrictions.isEmpty()) {
+                for (String r : selectedRestrictions) {
+                    pstmt.setString(index++, r);
+                }
+            }
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                items.add(rs.getString("iname"));
+            }
+            rs.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return items;
+    }
+
     // -------------------- Constructor --------------------
     public FrontEnd() {
         setTitle("FoodFinder");
@@ -163,10 +402,9 @@ public class FrontEnd extends JFrame {
         setLayout(new BorderLayout());
         getContentPane().setBackground(white);
 
-        // Initialize demo restaurant menus (demo data)
-        initDemoMenus();
+        allRestaurants = loadRestaurants();
 
-        // Header panel
+        // Header
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(white);
         header.setBorder(new EmptyBorder(20, 20, 10, 20));
@@ -176,7 +414,7 @@ public class FrontEnd extends JFrame {
         header.add(titleLabel, BorderLayout.NORTH);
         add(header, BorderLayout.NORTH);
 
-        // Card panel with one card per step/view.
+        // Card panel
         cardLayout = new CardLayout();
         cardPanel = new JPanel(cardLayout);
         cardPanel.setBackground(white);
@@ -185,10 +423,9 @@ public class FrontEnd extends JFrame {
         cardPanel.add(createRestrictionsPanel(), "restrictions");
         cardPanel.add(createFoodItemPanel(), "food");
         cardPanel.add(createResultsPanel(), "results");
-        // Menus, Items, and Recipe panels will be added dynamically.
         add(cardPanel, BorderLayout.CENTER);
 
-        // Progress panel (for the first four steps)
+        // Progress panel
         JPanel progressPanel = new JPanel(new GridLayout(1, 4, 10, 0));
         progressPanel.setBackground(white);
         progressPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -216,82 +453,16 @@ public class FrontEnd extends JFrame {
         add(progressPanel, BorderLayout.SOUTH);
     }
 
-    // -------------------- Demo Data Initialization --------------------
-    private void initDemoMenus() {
-        // For demonstration, assign each restaurant a list of menus and items.
-        restaurantMenus.put("Cool Cat Cafe", Arrays.asList(
-                new Menu("Breakfast", Arrays.asList(
-                        new MenuItem("Pancakes", "Fluffy pancakes with syrup. Contains dairy.", Arrays.asList("Dairy")),
-                        new MenuItem("Omelette", "Egg omelette with veggies. Contains eggs.", Arrays.asList("Eggs"))
-                )),
-                new Menu("Lunch", Arrays.asList(
-                        new MenuItem("Grilled Cheese", "Cheesy goodness on toasted bread. Contains dairy, gluten.", Arrays.asList("Dairy", "Gluten")),
-                        new MenuItem("Salad", "Mixed greens with vinaigrette.", new ArrayList<>())
-                ))
-        ));
-        restaurantMenus.put("Copper Cafe (Madonna Inn)", Arrays.asList(
-                new Menu("Lunch", Arrays.asList(
-                        new MenuItem("Pasta Primavera", "Pasta with fresh vegetables. Contains gluten.", Arrays.asList("Gluten")),
-                        new MenuItem("Soup of the Day", "Seasonal soup.", new ArrayList<>())
-                )),
-                new Menu("Dinner", Arrays.asList(
-                        new MenuItem("Steak", "Grilled steak with mashed potatoes. Contains dairy.", Arrays.asList("Dairy")),
-                        new MenuItem("Wine Pairing", "A selection of red wines.", new ArrayList<>())
-                ))
-        ));
-        restaurantMenus.put("Cowboy Cookies & Ice Cream", Arrays.asList(
-                new Menu("Dessert", Arrays.asList(
-                        new MenuItem("Chocolate Chip Cookie", "Crispy cookie with chocolate chips. Contains gluten.", Arrays.asList("Gluten")),
-                        new MenuItem("Vanilla Ice Cream", "Creamy ice cream. Contains dairy.", Arrays.asList("Dairy"))
-                ))
-        ));
-        restaurantMenus.put("Doc Burnstein's", Arrays.asList(
-                new Menu("Brunch", Arrays.asList(
-                        new MenuItem("Eggs Benedict", "Poached eggs on English muffins. Contains eggs and gluten.", Arrays.asList("Eggs", "Gluten")),
-                        new MenuItem("Fruit Bowl", "Seasonal fruits.", new ArrayList<>())
-                )),
-                new Menu("Dinner", Arrays.asList(
-                        new MenuItem("Salmon", "Grilled salmon with lemon butter. Contains dairy.", Arrays.asList("Dairy")),
-                        new MenuItem("Risotto", "Creamy risotto with mushrooms. Contains dairy.", Arrays.asList("Dairy"))
-                ))
-        ));
-        restaurantMenus.put("Domino's", Arrays.asList(
-                new Menu("Pizza Specials", Arrays.asList(
-                        new MenuItem("Pepperoni Pizza", "Classic pepperoni pizza. Contains gluten, dairy.", Arrays.asList("Gluten", "Dairy")),
-                        new MenuItem("Veggie Pizza", "Pizza loaded with vegetables. Contains gluten, dairy.", Arrays.asList("Gluten", "Dairy"))
-                ))
-        ));
-        restaurantMenus.put("El Pollo Loco", Arrays.asList(
-                new Menu("Grill", Arrays.asList(
-                        new MenuItem("Grilled Chicken", "Spicy grilled chicken. Contains none.", new ArrayList<>()),
-                        new MenuItem("Chicken Tacos", "Tacos with grilled chicken. Contains gluten.", Arrays.asList("Gluten"))
-                )),
-                new Menu("Salads", Arrays.asList(
-                        new MenuItem("Caesar Salad", "Romaine with Caesar dressing. Contains dairy, gluten.", Arrays.asList("Dairy", "Gluten")),
-                        new MenuItem("House Salad", "Fresh mixed greens.", new ArrayList<>())
-                ))
-        ));
-    }
-
-    // -------------------- Panel Creation Methods --------------------
-
-    // Returns card name based on current step index.
     private String getCardName(int step) {
         switch (step) {
-            case 0:
-                return "cuisine";
-            case 1:
-                return "meal";
-            case 2:
-                return "restrictions";
-            case 3:
-                return "food";
-            default:
-                return "results";
+            case 0: return "cuisine";
+            case 1: return "meal";
+            case 2: return "restrictions";
+            case 3: return "food";
+            default: return "results";
         }
     }
 
-    // Update progress label colors.
     private void updateProgressLabels() {
         for (int i = 0; i < progressLabels.length; i++) {
             if (i < currentStep) {
@@ -304,6 +475,7 @@ public class FrontEnd extends JFrame {
         }
     }
 
+    // -------------------- Panel Creation Methods --------------------
     private JPanel createCuisinePanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBackground(white);
@@ -314,13 +486,11 @@ public class FrontEnd extends JFrame {
         questionLabel.setForeground(darkGray);
         panel.add(questionLabel, BorderLayout.NORTH);
 
-        // Retrieve cuisines from database or fallback.
         List<String> cuisineList = new ArrayList<>();
-        try {
-            Class.forName("com.mysql.jdbc.Driver");
-            connect = DriverManager.getConnection("jdbc:mysql://ambari-node5.csc.calpoly.edu/foodfinder", "foodfinder", "password");
-            Statement statement = connect.createStatement();
-            ResultSet rs = statement.executeQuery("SELECT distinct cuisine FROM Restaurant;");
+        String sql = "SELECT DISTINCT cuisine FROM Restaurant";
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 cuisineList.add(rs.getString(1));
             }
@@ -331,7 +501,6 @@ public class FrontEnd extends JFrame {
         PagedSearchPanel optionsPanel = new PagedSearchPanel(cuisines);
         panel.add(optionsPanel, BorderLayout.CENTER);
 
-        // Navigation buttons.
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonPanel.setBackground(white);
         JButton backButton = new JButton("Back");
@@ -369,11 +538,10 @@ public class FrontEnd extends JFrame {
         panel.add(questionLabel, BorderLayout.NORTH);
 
         List<String> typeList = new ArrayList<>();
-        try {
-            Class.forName("com.mysql.jdbc.Driver");
-            connect = DriverManager.getConnection("jdbc:mysql://ambari-node5.csc.calpoly.edu/foodfinder", "foodfinder", "password");
-            Statement statement = connect.createStatement();
-            ResultSet rs = statement.executeQuery("SELECT distinct type FROM Menu;");
+        String sql = "SELECT DISTINCT type FROM Menu";
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 typeList.add(rs.getString(1));
             }
@@ -419,7 +587,7 @@ public class FrontEnd extends JFrame {
         questionLabel.setForeground(darkGray);
         panel.add(questionLabel, BorderLayout.NORTH);
 
-        List<String> restrictionList = Arrays.asList("Peanuts", "Shellfish", "Gluten", "Dairy");
+        List<String> restrictionList = loadAllergens();
         String[] restrictions = restrictionList.toArray(new String[0]);
         PagedSearchPanel optionsPanel = new PagedSearchPanel(restrictions);
         panel.add(optionsPanel, BorderLayout.CENTER);
@@ -455,7 +623,7 @@ public class FrontEnd extends JFrame {
         questionLabel.setForeground(darkGray);
         panel.add(questionLabel, BorderLayout.NORTH);
 
-        List<String> foodList = Arrays.asList("Pizza", "Burger", "Sushi", "Pasta", "Salad");
+        List<String> foodList = loadFoodItems();
         String[] foodItems = foodList.toArray(new String[0]);
         PagedSearchPanel optionsPanel = new PagedSearchPanel(foodItems);
         panel.add(optionsPanel, BorderLayout.CENTER);
@@ -474,7 +642,7 @@ public class FrontEnd extends JFrame {
                 JOptionPane.showMessageDialog(this, "Please select at least one food item.", "Selection Required", JOptionPane.WARNING_MESSAGE);
             } else {
                 selectedFoodItems.addAll(sel);
-                updateResultsPanel();  // update list and map based on selection
+                updateResultsPanel();
                 currentStep++;
                 cardLayout.show(cardPanel, "results");
             }
@@ -485,156 +653,15 @@ public class FrontEnd extends JFrame {
         return panel;
     }
 
-    // -------------------- Update Results Panel --------------------
-    private void updateResultsPanel() {
-        // Build the list of valid restaurants and compute matching items.
-        Set<Restaurant> validRestaurantsSet = new HashSet<>();
-        restaurantMatchingItems.clear();
-        for (Restaurant r : allRestaurants) {
-            List<Menu> menus = restaurantMenus.get(r.name);
-            if (menus != null) {
-                outer:
-                for (Menu menu : menus) {
-                    for (MenuItem mi : menu.items) {
-                        for (String food : selectedFoodItems) {
-                            if (mi.name.toLowerCase().contains(food.toLowerCase())) {
-                                validRestaurantsSet.add(r);
-                                break outer;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        // Save the complete list for filtering
-        currentValidRestaurants = new ArrayList<>(validRestaurantsSet);
-
-        DefaultListModel<Restaurant> listModel = new DefaultListModel<>();
-        if (currentValidRestaurants.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "No matching restaurants found.", "Results", JOptionPane.INFORMATION_MESSAGE);
-        } else {
-            for (Restaurant r : currentValidRestaurants) {
-                // Compute matching items for each restaurant.
-                List<String> matchingItems = new ArrayList<>();
-                List<Menu> menus = restaurantMenus.get(r.name);
-                if (menus != null) {
-                    for (Menu menu : menus) {
-                        for (MenuItem mi : menu.items) {
-                            for (String food : selectedFoodItems) {
-                                if (mi.name.toLowerCase().contains(food.toLowerCase())) {
-                                    matchingItems.add(mi.name);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-                restaurantMatchingItems.put(r, String.join(", ", matchingItems));
-                listModel.addElement(r);
-            }
-        }
-        resultsList.setModel(listModel);
-
-        // (Keep your existing map update code below…)
-        Set<RestaurantWaypoint> validWaypoints = new HashSet<>();
-        for (Restaurant r : currentValidRestaurants) {
-            validWaypoints.add(new RestaurantWaypoint(r));
-        }
-        restaurantWaypoints = validWaypoints;
-        WaypointPainter<RestaurantWaypoint> waypointPainter = new WaypointPainter<>();
-        waypointPainter.setWaypoints(restaurantWaypoints);
-        waypointPainter.setRenderer(new RestaurantWaypointRenderer());
-        resultsMapViewer.setOverlayPainter(waypointPainter);
-    }
-
-
-    // -------------------- Map Viewer with Custom Markers --------------------
-    private JXMapViewer createMapViewer(List<Restaurant> restaurants) {
-        JXMapViewer mapViewer = new JXMapViewer() {
-            @Override
-            public String getToolTipText(MouseEvent e) {
-                for (RestaurantWaypoint wp : restaurantWaypoints) {
-                    Point2D pt = getTileFactory().geoToPixel(wp.getPosition(), getZoom());
-                    int dx = (int) pt.getX() - e.getX();
-                    int dy = (int) pt.getY() - e.getY();
-                    if (Math.hypot(dx, dy) < 15) { // increased threshold
-                        String rating = wp.restaurant.rating;
-                        String color;
-                        if (rating.toUpperCase().contains("A")) {
-                            color = "green";
-                        } else if (rating.toUpperCase().contains("B")) {
-                            color = "lightgreen";
-                        } else {
-                            color = "yellow";
-                        }
-                        // Debug print to confirm tooltip detection.
-                        System.out.println("Hover detected near " + wp.restaurant.name);
-                        return "<html><b>" + wp.restaurant.name + "</b> - <span style='color:" + color + ";'>" + rating + "</span></html>";
-                    }
-                }
-                return null;
-            }
-        };
-        mapViewer.setTileFactory(new DefaultTileFactory(new OSMTileFactoryInfo()));
-        GeoPosition center = new GeoPosition(35.2704, -120.6631);
-        mapViewer.setZoom(5);
-        mapViewer.setAddressLocation(center);
-
-        // Activate tooltips immediately.
-        mapViewer.setToolTipText("");
-        ToolTipManager.sharedInstance().setInitialDelay(0);
-        ToolTipManager.sharedInstance().registerComponent(mapViewer);
-
-        restaurantWaypoints = new HashSet<>();
-        for (Restaurant res : restaurants) {
-            restaurantWaypoints.add(new RestaurantWaypoint(res));
-        }
-        WaypointPainter<RestaurantWaypoint> waypointPainter = new WaypointPainter<>();
-        waypointPainter.setWaypoints(restaurantWaypoints);
-        waypointPainter.setRenderer(new RestaurantWaypointRenderer());
-        mapViewer.setOverlayPainter(waypointPainter);
-
-        MouseInputListener mia = new PanMouseInputListener(mapViewer);
-        mapViewer.addMouseListener(mia);
-        mapViewer.addMouseMotionListener(mia);
-        mapViewer.addMouseWheelListener(new ZoomMouseWheelListenerCursor(mapViewer));
-
-        // Existing map click listener (if needed) can remain here.
-        mapViewer.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                for (RestaurantWaypoint wp : restaurantWaypoints) {
-                    Point2D pt = mapViewer.getTileFactory().geoToPixel(wp.getPosition(), mapViewer.getZoom());
-                    int dx = (int) pt.getX() - e.getX();
-                    int dy = (int) pt.getY() - e.getY();
-                    if (Math.hypot(dx, dy) < 15) {
-                        System.out.println("Clicked on " + wp.restaurant.name);
-                        // This click handling on the map remains separate from the results list.
-                        // (You could merge the behavior if desired.)
-                        selectedRestaurant = wp.restaurant;
-                        updateMenusPanel(selectedRestaurant);
-                        cardLayout.show(cardPanel, "menus");
-                        break;
-                    }
-                }
-            }
-        });
-
-        return mapViewer;
-    }
-
-    // -------------------- Results Panel --------------------
     private JPanel createResultsPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBackground(white);
         panel.setBorder(new EmptyBorder(20, 20, 20, 20));
 
-        // Search field for filtering restaurants.
         JTextField searchField = new JTextField();
         searchField.setFont(optionFont);
         panel.add(searchField, BorderLayout.NORTH);
 
-        // Create the JList to display restaurants.
         resultsList = new JList<>();
         resultsList.setCellRenderer(new ResultsListCellRenderer());
         resultsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -643,16 +670,14 @@ public class FrontEnd extends JFrame {
             public void mouseClicked(MouseEvent e) {
                 Restaurant clicked = resultsList.getSelectedValue();
                 if (clicked != null) {
-                    // If already selected, open the menus panel.
                     if (selectedRestaurant != null && selectedRestaurant.equals(clicked)) {
                         updateMenusPanel(clicked);
                         cardLayout.show(cardPanel, "menus");
                     } else {
-                        // Otherwise, set it as the selected restaurant and zoom the map.
                         selectedRestaurant = clicked;
                         GeoPosition pos = new GeoPosition(clicked.lat, clicked.lon);
                         resultsMapViewer.setAddressLocation(pos);
-                        resultsMapViewer.setZoom(3); // Zoom in a lot more.
+                        resultsMapViewer.setZoom(3);
                     }
                 }
             }
@@ -660,7 +685,6 @@ public class FrontEnd extends JFrame {
         JScrollPane listScrollPane = new JScrollPane(resultsList);
 
         resultsMapViewer = createMapViewer(allRestaurants);
-
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listScrollPane, resultsMapViewer);
         splitPane.setDividerLocation(300);
         panel.add(splitPane, BorderLayout.CENTER);
@@ -681,7 +705,6 @@ public class FrontEnd extends JFrame {
         buttonPanel.add(startOverButton);
         panel.add(buttonPanel, BorderLayout.SOUTH);
 
-        // Add a DocumentListener to the search field to filter the list.
         searchField.getDocument().addDocumentListener(new DocumentListener() {
             private void filterList() {
                 String filter = searchField.getText().trim().toLowerCase();
@@ -697,43 +720,63 @@ public class FrontEnd extends JFrame {
             public void removeUpdate(DocumentEvent e) { filterList(); }
             public void changedUpdate(DocumentEvent e) { filterList(); }
         });
-
-
         return panel;
     }
 
-
-    // -------------------- Custom ListCellRenderer for Results List --------------------
-    private class ResultsListCellRenderer extends JPanel implements ListCellRenderer<Restaurant> {
-        private JLabel nameLabel = new JLabel();
-        private JLabel itemsLabel = new JLabel();
-
-        public ResultsListCellRenderer() {
-            setLayout(new BorderLayout());
-            nameLabel.setFont(optionFont);
-            itemsLabel.setFont(optionFont.deriveFont(Font.ITALIC, 14f));
-        }
-
-        @Override
-        public Component getListCellRendererComponent(JList<? extends Restaurant> list, Restaurant value, int index, boolean isSelected, boolean cellHasFocus) {
-            removeAll();
-            if (value == null) {
-                nameLabel.setText("No matching restaurants found.");
-                add(nameLabel, BorderLayout.CENTER);
-            } else {
-                nameLabel.setText(value.name);
-                String matching = restaurantMatchingItems.getOrDefault(value, "");
-                itemsLabel.setText("Matching Items: " + matching);
-                add(nameLabel, BorderLayout.NORTH);
-                add(itemsLabel, BorderLayout.SOUTH);
+    private void updateResultsPanel() {
+        List<Restaurant> filteredRestaurants = loadFilteredRestaurants(selectedCuisines, selectedMealTypes, selectedFoodItems, selectedRestrictions);
+        currentValidRestaurants = filteredRestaurants;
+        DefaultListModel<Restaurant> listModel = new DefaultListModel<>();
+        if (currentValidRestaurants.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No matching restaurants found.", "Results", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            for (Restaurant r : currentValidRestaurants) {
+                List<String> matchingItems = loadMatchingItemsForRestaurant(r.id, selectedMealTypes, selectedFoodItems, selectedRestrictions);
+                restaurantMatchingItems.put(r, String.join(", ", matchingItems));
+                listModel.addElement(r);
             }
-            setBackground(isSelected ? accentColor : white);
-            setForeground(isSelected ? white : darkGray);
-            return this;
         }
+        resultsList.setModel(listModel);
+
+        restaurantWaypoints = new HashSet<>();
+        for (Restaurant r : currentValidRestaurants) {
+            restaurantWaypoints.add(new RestaurantWaypoint(r));
+        }
+        WaypointPainter<RestaurantWaypoint> waypointPainter = new WaypointPainter<>();
+        waypointPainter.setWaypoints(restaurantWaypoints);
+        waypointPainter.setRenderer(new RestaurantWaypointRenderer());
+        resultsMapViewer.setOverlayPainter(waypointPainter);
     }
 
-    // -------------------- Menus Panel --------------------
+    private JXMapViewer createMapViewer(List<Restaurant> restaurants) {
+        JXMapViewer mapViewer = new JXMapViewer();
+        mapViewer.setTileFactory(new DefaultTileFactory(new OSMTileFactoryInfo()));
+        GeoPosition center = new GeoPosition(35.2704, -120.6631);
+        mapViewer.setZoom(5);
+        mapViewer.setAddressLocation(center);
+
+        ToolTipManager.sharedInstance().setInitialDelay(0);
+        ToolTipManager.sharedInstance().registerComponent(mapViewer);
+
+        restaurantWaypoints = new HashSet<>();
+        for (Restaurant res : restaurants) {
+            restaurantWaypoints.add(new RestaurantWaypoint(res));
+        }
+        WaypointPainter<RestaurantWaypoint> waypointPainter = new WaypointPainter<>();
+        waypointPainter.setWaypoints(restaurantWaypoints);
+        waypointPainter.setRenderer(new RestaurantWaypointRenderer());
+        mapViewer.setOverlayPainter(waypointPainter);
+
+        MouseInputListener mia = new PanMouseInputListener(mapViewer);
+        mapViewer.addMouseListener(mia);
+        mapViewer.addMouseMotionListener(mia);
+        mapViewer.addMouseWheelListener(new ZoomMouseWheelListenerCursor(mapViewer));
+
+        // Removed mouse listener for clicking waypoints as it was deemed unnecessary.
+
+        return mapViewer;
+    }
+
     private void updateMenusPanel(Restaurant restaurant) {
         JPanel menusPanel = new JPanel(new BorderLayout(10, 10));
         menusPanel.setBackground(white);
@@ -744,13 +787,10 @@ public class FrontEnd extends JFrame {
         titleLabel.setForeground(darkGray);
         menusPanel.add(titleLabel, BorderLayout.NORTH);
 
-        List<Menu> menus = restaurantMenus.get(restaurant.name);
-        if (menus == null) {
-            menus = new ArrayList<>();
-        }
+        List<Menu> menus = loadMenus(restaurant.id);
         JPanel menuListPanel = new JPanel(new GridLayout(0, 1, 10, 10));
         for (Menu menu : menus) {
-            JButton btn = new JButton(menu.name);
+            JButton btn = new JButton(menu.type);
             btn.setFont(optionFont);
             btn.addActionListener(e -> {
                 selectedMenu = menu;
@@ -773,13 +813,12 @@ public class FrontEnd extends JFrame {
         cardPanel.add(menusPanel, "menus");
     }
 
-    // -------------------- Items Panel --------------------
     private void updateItemsPanel(Menu menu) {
         JPanel itemsPanel = new JPanel(new BorderLayout(10, 10));
         itemsPanel.setBackground(white);
         itemsPanel.setBorder(new EmptyBorder(20, 20, 20, 20));
 
-        JLabel titleLabel = new JLabel("Menu Items: " + menu.name, SwingConstants.CENTER);
+        JLabel titleLabel = new JLabel("Menu Items: " + menu.type, SwingConstants.CENTER);
         titleLabel.setFont(headerFont.deriveFont(Font.BOLD, 36f));
         titleLabel.setForeground(darkGray);
         itemsPanel.add(titleLabel, BorderLayout.NORTH);
@@ -795,21 +834,7 @@ public class FrontEnd extends JFrame {
             itemListPanel.removeAll();
             String filter = searchField.getText().trim().toLowerCase();
             for (MenuItem mi : menu.items) {
-                if (selectedFoodItems.contains(mi.name) && mi.name.toLowerCase().contains(filter)) {
-                    JButton btn = new JButton(mi.name);
-                    btn.setFont(optionFont);
-                    btn.setBackground(white); // keep same background
-                    // Removed gold border
-                    btn.addActionListener(ev -> {
-                        selectedItem = mi;
-                        updateRecipePanel(mi);
-                        cardLayout.show(cardPanel, "recipe");
-                    });
-                    itemListPanel.add(btn);
-                }
-            }
-            for (MenuItem mi : menu.items) {
-                if (!selectedFoodItems.contains(mi.name) && mi.name.toLowerCase().contains(filter)) {
+                if (mi.name.toLowerCase().contains(filter)) {
                     JButton btn = new JButton(mi.name);
                     btn.setFont(optionFont);
                     btn.addActionListener(ev -> {
@@ -845,7 +870,6 @@ public class FrontEnd extends JFrame {
         cardPanel.add(itemsPanel, "items");
     }
 
-    // -------------------- Recipe Panel --------------------
     private void updateRecipePanel(MenuItem item) {
         JPanel recipePanel = new JPanel(new BorderLayout(10, 10));
         recipePanel.setBackground(white);
@@ -886,7 +910,6 @@ public class FrontEnd extends JFrame {
         cardPanel.add(recipePanel, "recipe");
     }
 
-    // -------------------- Helper: Button Styling --------------------
     private void styleButton(JButton button) {
         button.setFont(optionFont);
         button.setBackground(accentColor);
@@ -894,7 +917,6 @@ public class FrontEnd extends JFrame {
         button.setFocusPainted(false);
     }
 
-    // -------------------- Helper: Navigation --------------------
     private void navigateBack() {
         if (currentStep > 0) {
             currentStep--;
@@ -903,7 +925,35 @@ public class FrontEnd extends JFrame {
         }
     }
 
-    // -------------------- Inner Class: PagedSearchPanel --------------------
+    private class ResultsListCellRenderer extends JPanel implements ListCellRenderer<Restaurant> {
+        private JLabel nameLabel = new JLabel();
+        private JLabel itemsLabel = new JLabel();
+
+        public ResultsListCellRenderer() {
+            setLayout(new BorderLayout());
+            nameLabel.setFont(optionFont);
+            itemsLabel.setFont(optionFont.deriveFont(Font.ITALIC, 14f));
+        }
+
+        @Override
+        public Component getListCellRendererComponent(JList<? extends Restaurant> list, Restaurant value, int index, boolean isSelected, boolean cellHasFocus) {
+            removeAll();
+            if (value == null) {
+                nameLabel.setText("No matching restaurants found.");
+                add(nameLabel, BorderLayout.CENTER);
+            } else {
+                nameLabel.setText(value.name);
+                String matching = restaurantMatchingItems.getOrDefault(value, "");
+                itemsLabel.setText("Matching Items: " + matching);
+                add(nameLabel, BorderLayout.NORTH);
+                add(itemsLabel, BorderLayout.SOUTH);
+            }
+            setBackground(isSelected ? accentColor : white);
+            setForeground(isSelected ? white : darkGray);
+            return this;
+        }
+    }
+
     private class PagedSearchPanel extends JPanel {
         private List<String> originalOptions;
         private List<String> filteredOptions;
@@ -970,7 +1020,7 @@ public class FrontEnd extends JFrame {
             gridPanel.removeAll();
             int start = currentPage * itemsPerPage;
             int end = Math.min(start + itemsPerPage, filteredOptions.size());
-            if (filteredOptions.size() == 0) {
+            if (filteredOptions.isEmpty()) {
                 gridPanel.setLayout(new BorderLayout());
                 gridPanel.add(new JLabel("No results found", SwingConstants.CENTER), BorderLayout.CENTER);
             } else {
@@ -984,10 +1034,8 @@ public class FrontEnd extends JFrame {
                     btn.setForeground(darkGray);
                     boolean selected = selectionMap.getOrDefault(option, false);
                     btn.setSelected(selected);
-                    if (selected) {
-                        btn.setBackground(accentColor);
-                        btn.setForeground(white);
-                    }
+                    btn.setBackground(selected ? accentColor : white);
+                    btn.setForeground(selected ? white : darkGray);
                     btn.addItemListener(e -> {
                         boolean isSelected = btn.isSelected();
                         selectionMap.put(option, isSelected);
@@ -1018,7 +1066,6 @@ public class FrontEnd extends JFrame {
         }
     }
 
-    // -------------------- Main --------------------
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             FrontEnd app = new FrontEnd();
