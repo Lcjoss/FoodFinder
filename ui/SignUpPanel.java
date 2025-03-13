@@ -127,7 +127,7 @@ public class SignUpPanel extends JPanel {
             if (user != null) {
                 // For sign-up, the new user will proceed through the normal selection process.
                 UserSession.setCurrentUser(user);
-                parentFrame.showPanel("search");
+                parentFrame.showPanel("userLogin");
             } else {
                 JOptionPane.showMessageDialog(
                         SignUpPanel.this,

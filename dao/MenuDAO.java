@@ -6,7 +6,6 @@ import java.sql.*;
 import java.util.*;
 
 public class MenuDAO {
-
     public static List<Menu> getMenusForRestaurant(int restaurantId) {
         List<Menu> menus = new ArrayList<>();
         String sql = "SELECT mID, type FROM Menu WHERE rid = ?";
@@ -22,7 +21,7 @@ public class MenuDAO {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException("Error getting menus for restaurant: " + e.getMessage(), e);
         }
         return menus;
     }
@@ -43,7 +42,7 @@ public class MenuDAO {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException("Error getting menu items: " + e.getMessage(), e);
         }
         return items;
     }
@@ -61,7 +60,7 @@ public class MenuDAO {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException("Error getting item allergens: " + e.getMessage(), e);
         }
         return allergens;
     }
@@ -111,18 +110,160 @@ public class MenuDAO {
                     pstmt.setString(index++, r);
                 }
             }
-            ResultSet rs = pstmt.executeQuery();
-            while (rs.next()) {
-                foodItems.add(rs.getString("iname"));
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    foodItems.add(rs.getString("iname"));
+                }
             }
-            rs.close();
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException("Error filtering food items: " + e.getMessage(), e);
         }
         return foodItems;
     }
 
-    // New helper method: get meal types for the selected cuisines.
+    // -------------------- New Admin Methods --------------------
+
+    public static void addMenu(int restaurantId, String menuType) {
+        List<String> allowedTypes = Arrays.asList("Breakfast", "Cafe", "Lunch", "Appetizers", "Drinks", "Dinner", "Sweets", "Lunch/Dinner");
+        if (!allowedTypes.contains(menuType)) {
+            throw new RuntimeException("Error: '" + menuType + "' is not a valid menu type.");
+        }
+        String sql = "INSERT INTO Menu (type, rid) VALUES (?, ?)";
+        try (Connection conn = DatabaseHelper.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, menuType);
+            pstmt.setInt(2, restaurantId);
+            pstmt.executeUpdate();
+        } catch (Exception e) {
+            throw new RuntimeException("Error adding menu: " + e.getMessage(), e);
+        }
+    }
+
+    public static void deleteMenu(int menuId) {
+        String deleteItemsSql = "DELETE FROM Item WHERE mID = ?";
+        try (Connection conn = DatabaseHelper.getConnection()) {
+            try (PreparedStatement pstmtItems = conn.prepareStatement(deleteItemsSql)) {
+                pstmtItems.setInt(1, menuId);
+                pstmtItems.executeUpdate();
+            }
+            String deleteMenuSql = "DELETE FROM Menu WHERE mID = ?";
+            try (PreparedStatement pstmtMenu = conn.prepareStatement(deleteMenuSql)) {
+                pstmtMenu.setInt(1, menuId);
+                pstmtMenu.executeUpdate();
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error deleting menu (foreign key constraints may prevent deletion): " + e.getMessage(), e);
+        }
+    }
+
+    public static void addItem(int menuId, String itemName, String recipe) {
+        String sql = "INSERT INTO Item (mID, iname) VALUES (?, ?)";
+        try (Connection conn = DatabaseHelper.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, menuId);
+            pstmt.setString(2, itemName);
+            pstmt.executeUpdate();
+        } catch (Exception e) {
+            throw new RuntimeException("Error adding item: " + e.getMessage(), e);
+        }
+        if (recipe != null && !recipe.trim().isEmpty()) {
+            String[] ingredients = recipe.split(",");
+            for (String ing : ingredients) {
+                String ingredient = ing.trim();
+                if (!ingredient.isEmpty()) {
+                    int ingID = getAllergenId(ingredient);
+                    if (ingID != -1) {
+                        addRecipeEntry(menuId, itemName, ingID);
+                    } else {
+                        System.err.println("Ingredient not found in Allergen table: " + ingredient);
+                    }
+                }
+            }
+        }
+    }
+
+    public static void deleteItem(int menuId, String itemName) {
+        String deleteRecipeSql = "DELETE FROM Recipe WHERE mID = ? AND iname = ?";
+        try (Connection conn = DatabaseHelper.getConnection()) {
+            try (PreparedStatement pstmtRecipe = conn.prepareStatement(deleteRecipeSql)) {
+                pstmtRecipe.setInt(1, menuId);
+                pstmtRecipe.setString(2, itemName);
+                pstmtRecipe.executeUpdate();
+            }
+            String deleteItemSql = "DELETE FROM Item WHERE mID = ? AND iname = ?";
+            try (PreparedStatement pstmtItem = conn.prepareStatement(deleteItemSql)) {
+                pstmtItem.setInt(1, menuId);
+                pstmtItem.setString(2, itemName);
+                pstmtItem.executeUpdate();
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error deleting item (foreign key constraints may prevent deletion): " + e.getMessage(), e);
+        }
+    }
+
+    public static void updateRecipe(int menuId, String itemName, String updatedRecipe) {
+        deleteRecipe(menuId, itemName);
+        if (updatedRecipe != null && !updatedRecipe.trim().isEmpty()) {
+            String[] ingredients = updatedRecipe.split(",");
+            for (String ing : ingredients) {
+                String ingredient = ing.trim();
+                if (!ingredient.isEmpty()) {
+                    int ingID = getAllergenId(ingredient);
+                    if (ingID != -1) {
+                        addRecipeEntry(menuId, itemName, ingID);
+                    } else {
+                        System.err.println("Ingredient not found in Allergen table: " + ingredient);
+                    }
+                }
+            }
+        }
+    }
+
+    public static void deleteRecipe(int menuId, String itemName) {
+        String sql = "DELETE FROM Recipe WHERE mID = ? AND iname = ?";
+        try (Connection conn = DatabaseHelper.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, menuId);
+            pstmt.setString(2, itemName);
+            pstmt.executeUpdate();
+        } catch (Exception e) {
+            throw new RuntimeException("Error deleting recipe (foreign key constraints may prevent deletion): " + e.getMessage(), e);
+        }
+    }
+
+    // -------------------- Helper Methods --------------------
+    private static int getAllergenId(String ingredient) {
+        int ingID = -1;
+        String sql = "SELECT ingID FROM Allergen WHERE ingName = ?";
+        try (Connection conn = DatabaseHelper.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, ingredient);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    ingID = rs.getInt("ingID");
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error getting allergen ID: " + e.getMessage(), e);
+        }
+        return ingID;
+    }
+
+    private static void addRecipeEntry(int menuId, String itemName, int ingID) {
+        String sql = "INSERT INTO Recipe (mID, iname, ingID) VALUES (?, ?, ?)";
+        try (Connection conn = DatabaseHelper.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, menuId);
+            pstmt.setString(2, itemName);
+            pstmt.setInt(3, ingID);
+            pstmt.executeUpdate();
+        } catch (Exception e) {
+            throw new RuntimeException("Error adding recipe entry: " + e.getMessage(), e);
+        }
+    }
+
+    // -------------------- Newly Added Methods --------------------
+
     public static List<String> getMealTypesForCuisines(List<String> cuisines) {
         List<String> typeList = new ArrayList<>();
         if (cuisines.isEmpty()) {
@@ -131,10 +272,10 @@ public class MenuDAO {
                  Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery(sql)) {
                 while (rs.next()) {
-                    typeList.add(rs.getString(1));
+                    typeList.add(rs.getString("type"));
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                throw new RuntimeException("Error getting meal types: " + e.getMessage(), e);
             }
         } else {
             StringBuilder sql = new StringBuilder();
@@ -149,11 +290,11 @@ public class MenuDAO {
                 }
                 try (ResultSet rs = pstmt.executeQuery()) {
                     while (rs.next()) {
-                        typeList.add(rs.getString(1));
+                        typeList.add(rs.getString("type"));
                     }
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                throw new RuntimeException("Error getting meal types: " + e.getMessage(), e);
             }
         }
         return typeList;
@@ -169,7 +310,7 @@ public class MenuDAO {
                 allergens.add(rs.getString("ingName"));
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException("Error getting allergens: " + e.getMessage(), e);
         }
         return allergens;
     }

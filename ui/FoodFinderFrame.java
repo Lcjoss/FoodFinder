@@ -373,23 +373,12 @@ public class FoodFinderFrame extends JFrame {
             List<String> foodList = MenuDAO.getFilteredFoodItems(selectedCuisines, selectedMealTypes, selectedRestrictions);
             if (foodOptionsPanel != null) {
                 foodOptionsPanel.updateOptions(foodList.toArray(new String[0]));
-                // Reapply pre-selected food items if available.
-                if (UserSession.getCurrentUser() != null) {
-                    String saved = UserSession.getCurrentUser().getSelectedFoodItems();
-                    if (saved != null && !saved.trim().isEmpty()) {
-                        List<String> savedList = Arrays.asList(saved.split(","));
-                        foodOptionsPanel.setSelectedOptions(savedList);
-                        selectedFoodItems.clear();
-                        selectedFoodItems.addAll(savedList);
-                    }
-                }
             }
             foodContinueButton.setEnabled(!foodList.isEmpty());
             currentStep++;
             cardLayout.show(cardPanel, getCardName(currentStep));
             updateProgressLabels();
         });
-
         buttonPanel.add(backButton);
         buttonPanel.add(continueButton);
         panel.add(buttonPanel, BorderLayout.SOUTH);

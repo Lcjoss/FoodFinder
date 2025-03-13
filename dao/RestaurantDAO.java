@@ -5,6 +5,35 @@ import java.sql.*;
 import java.util.*;
 
 public class RestaurantDAO {
+    public static void deleteRestaurant(int restaurantId) {
+        String sql = "DELETE FROM Restaurant WHERE rid = ?";
+        try (Connection conn = DatabaseHelper.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, restaurantId);
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected == 0) {
+                throw new RuntimeException("No restaurant found with id: " + restaurantId);
+            }
+        } catch (Exception ex) {
+            throw new RuntimeException("Error deleting restaurant", ex);
+        }
+    }
+    public static void addRestaurant(Restaurant restaurant) {
+        // Combine latitude and longitude into a coordinate string.
+        String coordString = restaurant.lat + "," + restaurant.lon;
+        String sql = "INSERT INTO Restaurant (rname, cuisine, price, coordinates, rating) VALUES (?, ?, ?, ?, ?)";
+        try (Connection conn = DatabaseHelper.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, restaurant.name);
+            pstmt.setString(2, restaurant.cuisine);
+            pstmt.setString(3, restaurant.price);
+            pstmt.setString(4, coordString);
+            pstmt.setString(5, restaurant.rating);
+            pstmt.executeUpdate();
+        } catch (Exception e) {
+            throw new RuntimeException("Error adding restaurant: " + e.getMessage(), e);
+        }
+    }
 
     public static List<Restaurant> getAllRestaurants() {
         List<Restaurant> list = new ArrayList<>();
