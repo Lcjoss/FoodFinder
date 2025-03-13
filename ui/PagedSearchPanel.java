@@ -108,13 +108,24 @@ public class PagedSearchPanel extends JPanel {
         gridPanel.repaint();
     }
 
+    /**
+     * Updates the available options while preserving the selection state
+     * of options that remain in the new list.
+     *
+     * @param options the new array of options
+     */
     public void updateOptions(String[] options) {
-        originalOptions = new ArrayList<>(Arrays.asList(options));
-        filteredOptions = new ArrayList<>(originalOptions);
-        selectionMap.clear();
-        for (String opt : originalOptions) {
-            selectionMap.put(opt, false);
+        // Create a new list of options.
+        List<String> newOptions = new ArrayList<>(Arrays.asList(options));
+        // Build a new selection map by retaining the state of previously selected options.
+        Map<String, Boolean> newSelectionMap = new HashMap<>();
+        for (String opt : newOptions) {
+            // If the option existed before, retain its selection; otherwise, default to false.
+            newSelectionMap.put(opt, selectionMap.getOrDefault(opt, false));
         }
+        originalOptions = newOptions;
+        filteredOptions = new ArrayList<>(originalOptions);
+        selectionMap = newSelectionMap;
         currentPage = 0;
         refreshGrid();
     }
@@ -127,5 +138,23 @@ public class PagedSearchPanel extends JPanel {
             }
         }
         return selected;
+    }
+
+    /**
+     * Sets the selection state based on a list of options.
+     * Options in selectedOptions will be marked as selected (true)
+     * and all other options will be unselected.
+     *
+     * @param selectedOptions the list of options to be selected
+     */
+    public void setSelectedOptions(List<String> selectedOptions) {
+        for (String opt : originalOptions) {
+            if (selectedOptions.contains(opt)) {
+                selectionMap.put(opt, true);
+            } else {
+                selectionMap.put(opt, false);
+            }
+        }
+        refreshGrid();
     }
 }
